@@ -1,0 +1,22 @@
+{
+  "name": "@vegamo/deepcode-studio",
+  "version": "0.4.3",
+  "private": true,
+  "description": "Cursor-style DeepSeek agent interface for Deep Code",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "deepcode-studio": "./src/server.js"
+  },
+  "scripts": {
+    "start": "electron src/desktop.js",
+    "web": "node src/server.js"
+  },
+  "dependencies": {
+    "@vegamo/deepcode-core": "0.4.3",
+    "electron": "33.4.11"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

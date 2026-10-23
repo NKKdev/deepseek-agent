@@ -1,0 +1,35 @@
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Dependency directory
+node_modules/
+# Ignore built ts files
+dist/
+out/
+# Studio runs this core build directly.
+!packages/core/dist/
+!packages/core/dist/**
+
+
+# Editors
+.idea/
+.vscode/
+*.tgz
+*.log
+*.vsix
+.deepcode/settings.json
+.deepcode/sessions/
+
+# TypeScript build info files
+*.tsbuildinfo
+
+# Environment variables
+.env
+.env.local
+
+# Generated files
+packages/cli/src/generated/
+packages/core/src/generated/
+packages/vscode-ide-companion/*.vsix
+packages/vscode-ide-companion/templates/

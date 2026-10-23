@@ -1,0 +1,19 @@
+---
+description: 更新 DeepSeek Agent 桌面窗口时，任务运行中不覆盖，关闭且无任务后再自动打开新窗口
+alwaysApply: true
+---
+
+# 桌面软件更新
+
+改了 Studio 或桌面端代码后，运行中的 Electron 窗口不会自动用上新代码。按下面的方式交付更新。
+
+- 窗口还开着，或 `/api/state` 的 `runningIds`、`queued` 表明有任务在执行或排队时，不要杀掉、重启或替换当前进程。源码可以写入磁盘，不要刷新或重启窗口。
+- 用监听端口的 Electron PID 判断窗口是否还在。不要用 `pkill -f desktop.js` 或按命令行匹配来结束进程。
+- 等当前窗口进程已经退出，且没有 Electron 在 `127.0.0.1` 上监听、也没有任务在跑，再启动更新后的窗口：
+
+```bash
+node node_modules/.bin/electron packages/studio/src/desktop.js --root "/Users/nkk/Desktop/nkk/software/deepcode-cli-0.4.3"
+```
+
+- 启动前如果已经有别的窗口在监听，就不要再开一个。
+- 看到日志「窗口已打开」之后，才能说新窗口已经打开。用户自己关掉旧窗口以便加载更新时，不要把那个退出当成崩溃。

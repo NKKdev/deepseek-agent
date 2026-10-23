@@ -1,0 +1,1 @@
+{"version":3,"file":"model-capabilities.d.ts","sourceRoot":"","sources":["../../src/common/model-capabilities.ts"],"names":[],"mappings":"AAAA,eAAO,MAAM,kBAAkB,aAK7B,CAAC;AAEH,MAAM,MAAM,cAAc,GAAG,SAAS,GAAG,IAAI,GAAG,KAAK,CAAC;AAEtD,wBAAgB,sBAAsB,CAAC,KAAK,EAAE,MAAM,GAAG,OAAO,CAE7D;AAED;;;;;;;GAOG;AACH,wBAAgB,kBAAkB,CAAC,KAAK,EAAE,MAAM,EAAE,IAAI,GAAE,cAA0B,GAAG,OAAO,CAQ3F"}

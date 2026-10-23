@@ -1,0 +1,186 @@
+import { handleAskUserQuestionTool } from "./ask-user-question-handler.js";
+import { handleBashTool } from "./bash-handler.js";
+import { handleEditTool } from "./edit-handler.js";
+import { handleReadImageTool } from "./read-image-handler.js";
+import { handleReadTool } from "./read-handler.js";
+import { handleSkillTool } from "./skill-handler.js";
+import { handleUpdatePlanTool } from "./update-plan-handler.js";
+import { handleManageSubagentTool } from "./manage-subagent-handler.js";
+import { handleUnderstandImageTool } from "./understand-image-handler.js";
+import { handleWebSearchTool } from "./web-search-handler.js";
+import { handleWriteTool } from "./write-handler.js";
+const BUILT_IN_TOOL_NAME_ALIASES = new Map([
+    ["Bash", "bash"],
+    ["Read", "read"],
+    ["Write", "write"],
+    ["Edit", "edit"],
+]);
+export class ToolExecutor {
+    projectRoot;
+    createOpenAIClient;
+    mcpManager;
+    loadSharp;
+    toolHandlers = new Map();
+    constructor(projectRoot, createOpenAIClient, mcpManager, loadSharp) {
+        this.projectRoot = projectRoot;
+        this.createOpenAIClient = createOpenAIClient;
+        this.mcpManager = mcpManager;
+        this.loadSharp = loadSharp;
+        this.registerToolHandlers();
+    }
+    async executeToolCalls(sessionId, toolCalls, hooks) {
+        const parsedCalls = toolCalls
+            .map((toolCall) => this.parseToolCall(toolCall))
+            .filter((toolCall) => Boolean(toolCall));
+        const executions = [];
+        for (const toolCall of parsedCalls) {
+            if (hooks?.shouldStop?.()) {
+                break;
+            }
+            const result = await this.executeToolCall(sessionId, toolCall, hooks);
+            executions.push({
+                toolCallId: toolCall.id,
+                content: this.formatToolResult(result),
+                result,
+            });
+            if (hooks?.shouldStop?.()) {
+                break;
+            }
+        }
+        return executions;
+    }
+    registerToolHandlers() {
+        this.toolHandlers.set("bash", handleBashTool);
+        this.toolHandlers.set("read", handleReadTool);
+        this.toolHandlers.set("ReadImage", handleReadImageTool);
+        this.toolHandlers.set("write", handleWriteTool);
+        this.toolHandlers.set("edit", handleEditTool);
+        this.toolHandlers.set("skill", handleSkillTool);
+        this.toolHandlers.set("AskUserQuestion", handleAskUserQuestionTool);
+        this.toolHandlers.set("UpdatePlan", handleUpdatePlanTool);
+        this.toolHandlers.set("ManageSubagent", handleManageSubagentTool);
+        this.toolHandlers.set("UnderstandImage", handleUnderstandImageTool);
+        this.toolHandlers.set("WebSearch", handleWebSearchTool);
+    }
+    parseToolCall(toolCall) {
+        if (!toolCall || typeof toolCall !== "object") {
+            return null;
+        }
+        const record = toolCall;
+        if (typeof record.id !== "string") {
+            return null;
+        }
+        const functionRecord = record.function;
+        if (!functionRecord || typeof functionRecord !== "object") {
+            return null;
+        }
+        if (typeof functionRecord.name !== "string") {
+            return null;
+        }
+        const rawArguments = typeof functionRecord.arguments === "string" ? functionRecord.arguments : "";
+        return {
+            id: record.id,
+            type: "function",
+            function: {
+                name: functionRecord.name,
+                arguments: rawArguments,
+            },
+        };
+    }
+    async executeToolCall(sessionId, toolCall, hooks) {
+        hooks?.signal?.throwIfAborted();
+        const toolName = toolCall.function.name;
+        const handlerName = BUILT_IN_TOOL_NAME_ALIASES.get(toolName) ?? toolName;
+        const handler = this.toolHandlers.get(handlerName);
+        if (!handler) {
+            if (this.mcpManager?.isMcpTool(toolName)) {
+                const parsedArgs = this.parseToolArguments(toolCall.function.arguments);
+                const args = parsedArgs.ok ? parsedArgs.args : {};
+                return this.mcpManager.executeMcpTool(toolName, args);
+            }
+            return {
+                ok: false,
+                name: toolName,
+                error: `Unknown tool: ${toolName}`,
+            };
+        }
+        const parsedArgs = this.parseToolArguments(toolCall.function.arguments);
+        if (!parsedArgs.ok) {
+            return {
+                ok: false,
+                name: toolName,
+                error: parsedArgs.error,
+            };
+        }
+        try {
+            const result = await handler(parsedArgs.args, {
+                signal: hooks?.signal,
+                sessionId,
+                projectRoot: hooks?.projectRoot || this.projectRoot,
+                toolCall,
+                createOpenAIClient: this.createOpenAIClient,
+                loadSharp: this.loadSharp,
+                onProcessStart: hooks?.onProcessStart,
+                onProcessExit: hooks?.onProcessExit,
+                onProcessStdout: hooks?.onProcessStdout,
+                onProcessTimeoutControl: hooks?.onProcessTimeoutControl,
+                onBackgroundProcessComplete: hooks?.onBackgroundProcessComplete,
+                onBeforeFileMutation: hooks?.onBeforeFileMutation,
+                onAfterFileMutation: hooks?.onAfterFileMutation,
+                onPluginRateLimitExceeded: hooks?.onPluginRateLimitExceeded,
+                onLoadSkill: hooks?.onLoadSkill,
+                onManageSubagent: hooks?.onManageSubagent,
+            });
+            hooks?.signal?.throwIfAborted();
+            return result;
+        }
+        catch (error) {
+            hooks?.signal?.throwIfAborted();
+            const message = error instanceof Error ? error.message : String(error);
+            return {
+                ok: false,
+                name: toolName,
+                error: message,
+            };
+        }
+    }
+    parseToolArguments(rawArguments) {
+        if (!rawArguments) {
+            return { ok: true, args: {} };
+        }
+        try {
+            const parsed = JSON.parse(rawArguments);
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+                return { ok: false, error: "InputParseError: Tool arguments must be a JSON object." };
+            }
+            return { ok: true, args: parsed };
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            return {
+                ok: false,
+                error: `InputParseError: Failed to parse tool arguments: ${message}. ` +
+                    "Ensure the tool call arguments are valid JSON. Prefer Edit over Write for large existing-file changes.",
+            };
+        }
+    }
+    formatToolResult(result) {
+        const payload = {
+            ok: result.ok,
+            name: result.name,
+        };
+        if (typeof result.output !== "undefined") {
+            payload.output = result.output;
+        }
+        if (result.error) {
+            payload.error = result.error;
+        }
+        if (result.metadata && Object.keys(result.metadata).length > 0) {
+            payload.metadata = result.metadata;
+        }
+        if (result.awaitUserResponse === true) {
+            payload.awaitUserResponse = true;
+        }
+        return JSON.stringify(payload, null, 2);
+    }
+}

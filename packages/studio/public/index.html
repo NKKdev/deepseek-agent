@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DeepSeek Agent</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="rail">
+        <div class="brand">
+          <span class="logo"><img src="/deepseek.svg" alt="" /></span>
+          <div>
+            <strong>DeepSeek</strong>
+            <button id="openFolder" class="project" type="button"><span id="projectName">项目</span></button>
+          </div>
+        </div>
+        <button id="newChat" class="new-task" type="button">新任务</button>
+        <label class="history-search">
+          <input id="historyFilter" type="search" placeholder="查找历史任务" autocomplete="off" />
+        </label>
+        <div id="history" class="history"></div>
+        <div id="usageTotal" class="usage-total"></div>
+        <div class="rail-foot">
+          <button id="openFiles" type="button">项目文件</button>
+          <button id="openSettings" type="button">设置</button>
+          <div class="account">
+            <span id="accountLabel"></span>
+            <button id="logout" type="button">退出</button>
+          </div>
+        </div>
+      </aside>
+
+      <main class="stage">
+        <header class="stage-head">
+          <span id="taskStatus" class="pill">空闲</span>
+          <span id="rootLabel" class="path"></span>
+        </header>
+        <div class="thread">
+          <div id="agentBar" class="agent-bar" hidden></div>
+          <div id="contextBar" hidden></div>
+          <div id="usageBar" class="usage-bar" hidden></div>
+          <div id="runbar" class="runbar" hidden>
+            <span class="dot"></span>
+            <span id="runDetail">自动执行中</span>
+          </div>
+          <div id="keyBanner" class="banner" hidden>
+            <span>还没有登录 DeepSeek 账户，任务暂时无法执行。</span>
+            <button id="bannerSettings" type="button">去登录</button>
+          </div>
+          <div id="transcript" class="transcript"></div>
+          <div id="live" class="live" hidden></div>
+          <pre id="stdout" class="stdout" hidden></pre>
+          <div id="permission" class="permission" hidden></div>
+          <div id="questions" class="questions" hidden></div>
+          <form id="composer" class="composer">
+            <div id="workspaceBar" class="workspace-bar"></div>
+            <textarea id="prompt" rows="3" placeholder="描述要完成的任务。执行中再输入，会交给这个任务的主智能体。"></textarea>
+            <div class="composer-bar">
+              <select id="modelSelect" aria-label="模型"></select>
+              <select id="workMode" aria-label="工作模式"></select>
+              <span id="runState" class="run-state">空闲</span>
+              <button id="stop" class="stop" type="button" hidden>停止</button>
+              <button id="send" class="send" type="submit">开始执行</button>
+            </div>
+            <p id="modeHint" class="mode-hint"></p>
+          </form>
+        </div>
+      </main>
+
+      <aside id="side" class="side" hidden>
+        <header class="side-head">
+          <div class="side-tabs" role="tablist" aria-label="侧栏">
+            <button type="button" id="side-tab-task" role="tab" data-side="task" aria-controls="pane-task" aria-selected="false" tabindex="-1">任务</button>
+            <button type="button" id="side-tab-edits" role="tab" data-side="edits" aria-controls="pane-edits" aria-selected="true" tabindex="0">编辑</button>
+            <button type="button" id="side-tab-files" role="tab" data-side="files" aria-controls="pane-files" aria-selected="false" tabindex="-1">文件</button>
+            <button type="button" id="side-tab-gpu" role="tab" data-side="gpu" aria-controls="pane-gpu" aria-selected="false" tabindex="-1">GPU</button>
+          </div>
+          <button id="closeSide" type="button" aria-label="关闭">×</button>
+        </header>
+        <section id="pane-task" class="side-pane task-pane" role="tabpanel" aria-labelledby="side-tab-task" hidden>
+          <div id="taskOverview" class="task-overview"></div>
+        </section>
+        <section id="pane-edits" class="side-pane edits-pane" role="tabpanel" aria-labelledby="side-tab-edits">
+          <div id="fileChanges" class="file-changes"></div>
+          <div id="editList" class="edit-list"></div>
+          <pre id="editStdout" class="stdout" hidden></pre>
+        </section>
+        <section id="pane-files" class="side-pane files-pane" role="tabpanel" aria-labelledby="side-tab-files" hidden>
+          <label class="search">
+            <input id="filter" type="search" placeholder="搜索文件" autocomplete="off" />
+          </label>
+          <div id="tree" class="tree" role="tree"></div>
+          <div id="tabs" class="tabs"></div>
+          <div id="editor" class="editor"></div>
+          <footer class="drawer-foot"><span id="fileMeta"></span></footer>
+        </section>
+        <section id="pane-gpu" class="side-pane gpu-pane" role="tabpanel" aria-labelledby="side-tab-gpu" hidden>
+          <div id="gpuList" class="gpu-list"></div>
+          <div class="gpu-add">
+            <button id="gpuAddToggle" type="button" class="gpu-add-toggle" aria-expanded="false">添加服务器</button>
+            <form id="gpuForm" class="gpu-form" hidden>
+              <p class="hint">添加后可切换当前使用的远程 GPU 服务器。</p>
+              <label>名称<input id="gpuName" placeholder="训练机" required /></label>
+              <label>地址<input id="gpuHost" placeholder="10.0.0.8 或 gpu.example.com" required /></label>
+              <div class="gpu-row">
+                <label>端口<input id="gpuPort" inputmode="numeric" placeholder="22" /></label>
+                <label>用户<input id="gpuUser" placeholder="root" /></label>
+              </div>
+              <div class="segment gpu-auth" role="radiogroup" aria-label="登录方式">
+                <label><input type="radio" name="gpuAuth" value="password" checked /><span>密码</span></label>
+                <label><input type="radio" name="gpuAuth" value="key" /><span>密钥</span></label>
+              </div>
+              <label id="gpuKeyLabel" hidden>密钥文件<input id="gpuKeyPath" placeholder="~/.ssh/id_rsa" autocomplete="off" /></label>
+              <label id="gpuPasswordLabel"><span id="gpuPasswordCaption">登录密码</span><input id="gpuPassword" type="password" autocomplete="off" /></label>
+              <label>说明<input id="gpuNote" placeholder="A100 × 4" /></label>
+              <div class="gpu-row">
+                <button id="gpuAddCancel" type="button">取消</button>
+                <button class="send" type="submit">添加</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </aside>
+      <div id="railResize" class="resize-handle rail-resize" role="separator" aria-orientation="vertical" aria-label="调整左侧栏宽度" tabindex="0"></div>
+      <div id="sideResize" class="resize-handle side-resize" role="separator" aria-orientation="vertical" aria-label="调整右侧栏宽度" tabindex="0" hidden></div>
+    </div>
+
+    <div id="settingsModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <form id="settingsForm" class="dialog">
+        <header>
+          <h2 id="settingsTitle">模型设置</h2>
+          <button id="closeSettings" type="button" aria-label="关闭">×</button>
+        </header>
+        <p class="hint">配置保存在 <code>~/.deepcode/settings.json</code>，和命令行版共用。</p>
+        <label>API Key<input id="apiKey" type="password" autocomplete="off" placeholder="留空则保留已保存的 Key" /></label>
+        <p id="keyHint" class="hint"></p>
+        <label>模型
+          <input id="model" list="models" />
+          <datalist id="models">
+            <option value="deepseek-flash"></option>
+            <option value="deepseek-v4-pro"></option>
+            <option value="deepseek-v4-flash"></option>
+          </datalist>
+        </label>
+        <label>接口地址<input id="baseURL" type="url" /></label>
+        <div class="setting-group">
+          <label class="check"><input id="thinking" type="checkbox" /><span>启用思考模式</span></label>
+          <div class="effort">
+            <div class="effort-head"><span>推理强度</span></div>
+            <div class="segment" role="radiogroup" aria-label="推理强度">
+              <label><input type="radio" name="effort" value="low" /><span>低</span></label>
+              <label><input type="radio" name="effort" value="high" /><span>高</span></label>
+              <label><input type="radio" name="effort" value="max" /><span>最大</span></label>
+            </div>
+            <p id="effortHint" class="hint"></p>
+          </div>
+        </div>
+        <footer>
+          <button id="cancelSettings" type="button">取消</button>
+          <button class="send" type="submit">保存</button>
+        </footer>
+      </form>
+    </div>
+
+    <div id="folderModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="folderTitle">
+      <form id="folderForm" class="dialog folder-dialog">
+        <header>
+          <h2 id="folderTitle">工作目录</h2>
+          <button id="closeFolder" type="button" aria-label="关闭">×</button>
+        </header>
+        <p class="hint">可以选多个目录。点一行即可把它设为当前工作目录，其余目录智能体也可以读写。</p>
+        <section class="folder-section">
+          <div class="section-label">已选目录</div>
+          <div id="workspaceList" class="workspace-list"></div>
+        </section>
+        <section class="folder-section">
+          <div class="section-label">添加目录</div>
+          <div class="path-row">
+            <input id="folderPath" placeholder="输入路径，或从电脑中选择" />
+            <button id="addFolder" type="button">添加</button>
+            <button id="browseFolder" type="button">从电脑选择</button>
+          </div>
+          <div id="shortcuts" class="place-row"></div>
+        </section>
+        <section id="browser" class="browser" hidden>
+          <div class="browser-head">
+            <button id="browserUp" type="button">上一级</button>
+            <span id="browserPath"></span>
+            <button id="browserUse" type="button">选择此目录</button>
+          </div>
+          <div id="browserPlaces" class="place-row"></div>
+          <div id="browserList"></div>
+        </section>
+        <p id="folderError" class="error" hidden></p>
+        <footer>
+          <button id="cancelFolder" type="button">取消</button>
+          <button class="send" type="submit">使用这些目录</button>
+        </footer>
+      </form>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+    <div id="login" class="login" hidden role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+      <form id="loginForm" class="login-card">
+        <div class="logo-lg"><img src="/deepseek.svg" alt="" /></div>
+        <h1 id="loginTitle">登录 DeepSeek 账户</h1>
+        <p>使用 DeepSeek 开放平台的 API Key。登录只验证账户，不会发起对话，也不消耗 token。</p>
+        <label>API Key<input id="loginKey" type="password" autocomplete="off" placeholder="sk-..." /></label>
+        <label>接口地址<input id="loginBase" type="url" value="https://api.deepseek.com" /></label>
+        <p id="loginError" class="error" hidden></p>
+        <button id="loginSubmit" class="send" type="submit">登录</button>
+        <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">获取 API Key</a>
+      </form>
+    </div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
